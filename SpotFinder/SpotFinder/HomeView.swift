@@ -46,26 +46,53 @@ struct HomeView: View {
                 
                 Spacer()
                 
-                // Modern button
-                NavigationLink(destination: MapScreen()) {
-                    HStack(spacing: 12) {
-                        Image(systemName: "map")
-                            .font(.headline)
-                        Text("Explore Map")
-                            .font(.headline)
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        LinearGradient(
-                            colors: [.blue, .purple],
-                            startPoint: .leading,
-                            endPoint: .trailing
+                // Buttons
+                VStack(spacing: 16) {
+                    // Explore Map button
+                    NavigationLink(destination: MapScreen()) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "map")
+                                .font(.headline)
+                            Text("Explore Map")
+                                .font(.headline)
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            LinearGradient(
+                                colors: [.blue, .purple],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
                         )
-                    )
-                    .cornerRadius(16)
-                    .shadow(color: .blue.opacity(0.3), radius: 10, x: 0, y: 5)
+                        .cornerRadius(16)
+                        .shadow(color: .blue.opacity(0.3), radius: 10, x: 0, y: 5)
+                    }
+                    
+                    // Discover Popular Spots button
+                    NavigationLink(destination: MapScreen()) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "sparkles")
+                                .font(.headline)
+                            Text("Discover Popular Spots")
+                                .font(.headline)
+                        }
+                        .foregroundColor(.blue)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(
+                                    LinearGradient(
+                                        colors: [.blue, .purple],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    ),
+                                    lineWidth: 2
+                                )
+                        )
+                    }
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 40)

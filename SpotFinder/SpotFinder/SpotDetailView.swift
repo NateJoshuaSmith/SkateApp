@@ -7,6 +7,7 @@
 
 import SwiftUI
 import FirebaseAuth
+import Combine
 
 struct SpotDetailView: View {
     let spot: SkateSpot
@@ -16,8 +17,10 @@ struct SpotDetailView: View {
     @State private var showDeleteAlert = false
     @State private var isDeleting = false
     @State private var errorMessage: String?
-    @State private var isLoading = true
-    
+    @State private var comments: [Comment] = []
+    @State private var newCommentText: String = ""
+    @State private var isAddingComment = false
+    @State private var commentListener: AnyCancellable?    
     // Check if current user owns this spot
     private var isOwner: Bool {
         guard let currentUserId = Auth.auth().currentUser?.uid else {
@@ -28,102 +31,145 @@ struct SpotDetailView: View {
     
     var body: some View {
         NavigationView {
-            ZStack {
-                if isLoading {
-                    ProgressView("Loading spot details...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    ScrollView {
-                        VStack(spacing: 24) {
-                            // Spot Name Card
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(spot.name)
-                                    .font(.system(size: 32, weight: .bold, design: .rounded))
-                                    .foregroundColor(.primary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(20)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(Color(.systemBackground))
-                                    .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
-                            )
-                            .padding(.horizontal)
-                            .padding(.top)
-                            
-                            // Comments Card
-                            VStack(alignment: .leading, spacing: 12) {
-                                Label("Description", systemImage: "text.bubble.fill")
-                                    .font(.headline)
-                                    .foregroundColor(.blue)
-                                
-                                Text(spot.comment)
-                                    .font(.body)
-                                    .foregroundColor(.primary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(20)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(Color(.systemBackground))
-                                    .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
-                            )
-                            .padding(.horizontal)
-                            
-                            // Created Date Card
-                            VStack(alignment: .leading, spacing: 12) {
-                                Label("Added", systemImage: "calendar")
-                                    .font(.headline)
-                                    .foregroundColor(.blue)
-                                
-                                Text(spot.createdAt, style: .date)
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(20)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(Color(.systemBackground))
-                                    .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
-                            )
-                            .padding(.horizontal)
-                            
-                            // Delete Button (only show if user owns the spot)
-                            if isOwner {
-                                Button(action: {
-                                    showDeleteAlert = true
-                                }) {
-                                    HStack {
-                                        Spacer()
-                                        if isDeleting {
-                                            ProgressView()
-                                                .tint(.white)
-                                        } else {
-                                            Image(systemName: "trash.fill")
-                                        }
-                                        Text(isDeleting ? "Deleting..." : "Delete Spot")
-                                            .fontWeight(.semibold)
-                                        Spacer()
-                                    }
-                                    .foregroundColor(.white)
-                                    .padding(.vertical, 16)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 16)
-                                            .fill(Color.red)
-                                            .shadow(color: .red.opacity(0.3), radius: 10, x: 0, y: 5)
-                                    )
-                                }
-                                .disabled(isDeleting)
-                                .padding(.horizontal)
-                            }
-                            
-                            Spacer(minLength: 40)
-                        }
-                        .padding(.vertical)
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Spot Name Card
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(spot.name)
+                            .font(.system(size: 32, weight: .bold, design: .rounded))
+                            .foregroundColor(.primary)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color(.systemBackground))
+                            .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+                    )
+                    .padding(.horizontal)
+                    .padding(.top)
+                    
+                    // Comments Card
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label("Description", systemImage: "text.bubble.fill")
+                            .font(.headline)
+                            .foregroundColor(.blue)
+                        
+                        Text(spot.comment)
+                            .font(.body)
+                            .foregroundColor(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color(.systemBackground))
+                            .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+                    )
+                    .padding(.horizontal)
+                    
+                    // Created Date Card
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label("Added", systemImage: "calendar")
+                            .font(.headline)
+                            .foregroundColor(.blue)
+                        
+                        Text(spot.createdAt, style: .date)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color(.systemBackground))
+                            .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+                    )
+                    .padding(.horizontal)
+                    
+                    // Comments Section
+                    VStack(alignment: .leading, spacing: 16) {
+                        Label("Comments", systemImage: "bubble.left.and.bubble.right.fill")
+                            .font(.headline)
+                            .foregroundColor(.blue)
+                        
+                        // Comment Input
+                        HStack {
+                            TextField("Add a comment...", text: $newCommentText, axis: .vertical)
+                                .textFieldStyle(.roundedBorder)
+                                .lineLimit(3...6)
+                            
+                            Button(action: {
+                                Task {
+                                    await addComment()
+                                }
+                            }) {
+                                if isAddingComment {
+                                    ProgressView()
+                                } else {
+                                    Image(systemName: "arrow.up.circle.fill")
+                                        .font(.title2)
+                                        .foregroundColor(.blue)
+                                }
+                            }
+                            .disabled(newCommentText.trimmingCharacters(in: .whitespaces).isEmpty || isAddingComment)
+                        }
+                        
+                        // Comments List
+                        if comments.isEmpty {
+                            Text("No comments yet. Be the first to comment!")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.vertical, 20)
+                        } else {
+                            ForEach(comments) { comment in
+                                CommentRow(comment: comment)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color(.systemBackground))
+                            .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+                    )
+                    .padding(.horizontal)
+                    
+                    // Delete Button (only show if user owns the spot)
+                    if isOwner {
+                        Button(action: {
+                            showDeleteAlert = true
+                        }) {
+                            HStack {
+                                Spacer()
+                                if isDeleting {
+                                    ProgressView()
+                                        .tint(.white)
+                                } else {
+                                    Image(systemName: "trash.fill")
+                                }
+                                Text(isDeleting ? "Deleting..." : "Delete Spot")
+                                    .fontWeight(.semibold)
+                                Spacer()
+                            }
+                            .foregroundColor(.white)
+                            .padding(.vertical, 16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color.red)
+                                    .shadow(color: .red.opacity(0.3), radius: 10, x: 0, y: 5)
+                            )
+                        }
+                        .disabled(isDeleting)
+                        .padding(.horizontal)
+                    }
+                    
+                    Spacer(minLength: 40)
                 }
+                .padding(.vertical)
             }
             .navigationTitle("Spot Details")
             .navigationBarTitleDisplayMode(.inline)
@@ -157,10 +203,10 @@ struct SpotDetailView: View {
                 }
             }
             .onAppear {
-                // Simulate a brief loading time for better UX
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    isLoading = false
-                }
+                startListeningToComments()
+            }
+            .onDisappear {
+                commentListener?.cancel()
             }
         }
     }
@@ -176,6 +222,31 @@ struct SpotDetailView: View {
             isDeleting = false
         }
     }
+    
+    private func addComment() async {
+        guard !newCommentText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        
+        isAddingComment = true
+        let text = newCommentText
+        newCommentText = ""
+        
+        do {
+            try await spotService.addComment(to: spot, text: text)
+        } catch {
+            errorMessage = "Failed to add comment: \(error.localizedDescription)"
+            newCommentText = text
+        }
+        
+        isAddingComment = false
+    }
+    
+   private func startListeningToComments() {
+    commentListener = spotService.listenToComments(for: spot)
+        .receive(on: DispatchQueue.main)
+        .sink { newComments in
+            comments = newComments
+        }
+    }
 }
 
 #Preview {
@@ -189,5 +260,37 @@ struct SpotDetailView: View {
         ),
         spotService: SpotService()
     )
+}
+
+// Comment Row View - displays a single comment
+struct CommentRow: View {
+    let comment: Comment
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(comment.createdByUsername ?? "Anonymous")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Text(comment.createdAt, style: .relative)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            Text(comment.text)
+                .font(.body)
+                .foregroundColor(.primary)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(.secondarySystemBackground))
+        )
+    }
 }
 

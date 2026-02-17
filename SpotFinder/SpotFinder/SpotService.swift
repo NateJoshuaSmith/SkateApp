@@ -30,6 +30,39 @@ class SpotService: ObservableObject {
             print("Error fetching spots: \(error)")
         }
     }
+
+    // Get username for current user (from Firestore or create default)
+    private func getCurrentUsername() async -> String {
+        guard let currentUser = Auth.auth().currentUser,
+            let email = currentUser.email else {
+            return "Anonymous"
+        }
+        
+        let userId = currentUser.uid
+        
+        do {
+            // Try to fetch user profile from Firestore
+            let doc = try await db.collection("users").document(userId).getDocument()
+            
+            if doc.exists, let profile = try? doc.data(as: UserProfile.self) {
+                return profile.username  // Return stored username
+            } else {
+                // User doesn't have a profile yet, create one with email prefix
+                let defaultUsername = email.components(separatedBy: "@").first ?? "User"
+                let profile = UserProfile(
+                    id: userId,
+                    username: defaultUsername,
+                    email: email
+                )
+                try db.collection("users").document(userId).setData(from: profile)
+                return defaultUsername
+            }
+        } catch {
+            print("Error fetching username: \(error)")
+            // Fallback to email prefix
+            return email.components(separatedBy: "@").first ?? "Anonymous"
+        }
+    }
     
     // Add a new spot
     func addSpot(name: String, latitude: Double, longitude: Double, comment: String) async throws {
@@ -90,6 +123,64 @@ class SpotService: ObservableObject {
             print("Error updating spot location: \(error)")
             throw error
         }
+    }
+
+    // Add comment to a spot
+    func addComment(to spot: SkateSpot, text: String) async throws {
+        guard let spotId = spot.id else { return }
+        guard let currentUser = Auth.auth().currentUser else {
+            throw NSError(domain: "SpotService", code: 401, 
+                        userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+        }
+        
+        let userId = currentUser.uid
+        
+        // Get username (from Firestore or create default)
+        let username = await getCurrentUsername()
+        
+        let comment = Comment(
+            text: text,
+            createdBy: userId,
+            createdByUsername: username  // ← Use the fetched/created username
+        )
+        
+        do {
+            _ = try db.collection(collectionName)
+                .document(spotId)
+                .collection("comments")
+                .addDocument(from: comment)
+        } catch {
+            print("Error adding comment: \(error)")
+            throw error
+        }
+    }
+    
+    // Listen to comments for a specific spot (real-time updates)
+    func listenToComments(for spot: SkateSpot) -> AnyPublisher<[Comment], Never> {
+        guard let spotId = spot.id else {
+            return Just([]).eraseToAnyPublisher()
+        }
+        
+        let subject = PassthroughSubject<[Comment], Never>()
+        
+        db.collection(collectionName)
+            .document(spotId)
+            .collection("comments")
+            .order(by: "createdAt", descending: false)  // Oldest first
+            .addSnapshotListener { snapshot, error in
+                guard let documents = snapshot?.documents else {
+                    print("Error fetching comments: \(error?.localizedDescription ?? "Unknown error")")
+                    subject.send([])
+                    return
+                }
+                
+                let comments = documents.compactMap { document in
+                    try? document.data(as: Comment.self)
+                }
+                subject.send(comments)
+            }
+        
+        return subject.eraseToAnyPublisher()
     }
     
     // Listen for real-time updates (optional - for real-time sync)
